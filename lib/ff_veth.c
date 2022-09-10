@@ -260,6 +260,20 @@ int ff_zc_mbuf_get(struct ff_zc_mbuf *m, int len) {
     return 0;
 }
 
+int ff_zc_mbuf_expand(struct ff_zc_mbuf *m, int len) {
+  struct mbuf *mb;
+
+  if (m == NULL)
+    return -1;
+
+  mb = m_getm2(m->bsd_mbuf, max(len, 1), M_WAITOK, MT_DATA, 0);
+  if (mb == NULL)
+    return -1;
+
+  m->len += len;
+  return 0;
+}
+
 int
 ff_zc_mbuf_write(struct ff_zc_mbuf *zm, const char *data, int len)
 {
@@ -294,10 +308,36 @@ ff_zc_mbuf_write(struct ff_zc_mbuf *zm, const char *data, int len)
 }
 
 int
-ff_zc_mbuf_read(struct ff_zc_mbuf *m, const char *data, int len)
+ff_zc_mbuf_read(struct ff_zc_mbuf *zm, char *data, int len)
 {
-    // DOTO: Support read zero copy
-    return 0;
+    int length, progress = 0;
+    struct mbuf *m, *mb;
+
+    if (zm == NULL || data == NULL || len == 0) 
+        return -1;
+    
+    m = (struct mbuf *)zm->bsd_mbuf_off;
+    if (m == NULL || zm->len < len)
+        return -1;
+
+    while (m != NULL && len != progress) {
+        length = min(m->m_len - zm->off, len - progress);
+
+        bcopy(mtod(m, char *) + zm->off, data + progress, length);
+        progress += length;
+
+        if (length + zm->off == m->m_len) { 
+            m = m->m_next;
+            zm->off = 0;
+        } else 
+            zm->off += length;
+
+        zm->len -= length;
+    }
+
+    zm->bsd_mbuf_off = m;
+
+    return progress;
 }
 
 void *

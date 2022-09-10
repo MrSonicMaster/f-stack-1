@@ -30,10 +30,10 @@ HOST_OS:=$(shell uname -s)
 
 DEBUG=-O0 -gdwarf-2 -g3 -Wno-format-truncation
 
-# No DPDK KNI support on FreeBSD
-ifneq ($(TGT_OS),FreeBSD)
-FF_KNI=1
-endif
+# # No DPDK KNI support on FreeBSD
+# ifneq ($(TGT_OS),FreeBSD)
+# FF_KNI=1
+# endif
 
 #FF_FLOW_ISOLATE=1
 
@@ -41,8 +41,8 @@ endif
 #FF_NETGRAPH=1
 #FF_IPFW=1
 
-#FF_USE_PAGE_ARRAY=1
-#FF_ZC_SEND=1
+FF_USE_PAGE_ARRAY=1
+FF_ZC_SEND=1
 FF_INET6=1
 
 # TCPHPTS drivers rack and bbr
@@ -57,7 +57,7 @@ endif
 
 PKGCONF ?= pkg-config
 
-DPDK_CFLAGS= -Wall -Wno-deprecated-declarations -Werror $(shell $(PKGCONF) --cflags libdpdk)
+DPDK_CFLAGS= -Wall -Wno-deprecated-declarations $(shell $(PKGCONF) --cflags libdpdk)
 
 KERNPREINCLUDES:= ${INCLUDES}
 INCLUDES= -I${OVERRIDE_INCLUDES_ROOT} ${KERNPREINCLUDES}
@@ -122,7 +122,7 @@ ifdef FF_TCPHPTS
 CFLAGS+= -DTCPHPTS -DRATELIMIT
 endif
 
-HOST_C= ${CC} -c $(HOST_CFLAGS) ${HOST_INCLUDES} ${WERROR} ${PROF} $<
+HOST_C= ${CC} -c $(HOST_CFLAGS) ${HOST_INCLUDES} ${PROF} $<
 
 
 ifneq ($(filter amd64 i386,${MACHINE_CPUARCH}),)
@@ -237,7 +237,7 @@ FF_SRCS+=                     \
 	ff_subr_prf.c         \
 	ff_vfs_ops.c          \
 	ff_veth.c             \
-	ff_route.c
+	ff_route.c    
 
 ifdef FF_NETGRAPH
 FF_SRCS+=                   \
@@ -251,6 +251,7 @@ FF_HOST_SRCS+=              \
 	ff_ini_parser.c     \
 	ff_dpdk_if.c        \
 	ff_dpdk_pcap.c      \
+	ff_rss.c            \
 	ff_epoll.c          \
 	ff_init.c	
 
@@ -716,6 +717,7 @@ install:
 	rm -rf ${PREFIX_LIB}/libfstack.a
 	rm -rf ${PREFIX_INCLUDE}/ff_config.h
 	rm -rf ${PREFIX_INCLUDE}/ff_api.h
+	rm -rf ${PREFIX_INCLUDE}/ff_rss.h
 	rm -rf ${PREFIX_INCLUDE}/ff_event.h
 	rm -rf ${PREFIX_INCLUDE}/ff_errno.h
 	rm -rf ${PREFIX_INCLUDE}/ff_epoll.h
@@ -725,6 +727,7 @@ install:
 	ln -sf ${PREFIX_LIB}/libfstack.a.${F-STACK_VERSION} ${PREFIX_LIB}/libfstack.a
 	cp -f ff_config.h ${PREFIX_INCLUDE}/ff_config.h
 	cp -f ff_api.h ${PREFIX_INCLUDE}/ff_api.h
+	cp -f ff_rss.h ${PREFIX_INCLUDE}/ff_rss.h
 	cp -f ff_event.h ${PREFIX_INCLUDE}/ff_event.h
 	cp -f ff_errno.h ${PREFIX_INCLUDE}/ff_errno.h
 	cp -f ff_epoll.h ${PREFIX_INCLUDE}/ff_epoll.h
@@ -736,6 +739,7 @@ uninstall:
 	rm -rf ${PREFIX_LIB}/libfstack.a
 	rm -rf ${PREFIX_INCLUDE}/ff_config.h
 	rm -rf ${PREFIX_INCLUDE}/ff_api.h
+	rm -rf ${PREFIX_INCLUDE}/ff_rss.h
 	rm -rf ${PREFIX_INCLUDE}/ff_event.h
 	rm -rf ${PREFIX_INCLUDE}/ff_errno.h
 	rm -rf ${PREFIX_INCLUDE}/ff_epoll.h

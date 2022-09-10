@@ -49,7 +49,7 @@ struct linux_sockaddr {
 #define AF_INET6_FREEBSD    28
 #define PF_INET6_FREEBSD    AF_INET6_FREEBSD
 
-typedef int (*loop_func_t)(void *arg);
+typedef void (*loop_func_t)(void *arg, uint64_t tsc);
 
 int ff_init(int argc, char * const argv[]);
 
@@ -253,7 +253,7 @@ struct ff_zc_mbuf {
  * Get the ff zero copy mbuf.
  *
  * @param m
- *   The ponitor of 'sturct ff_zc_mbuf', and can't be NULL.
+ *   The ponitor of 'struct ff_zc_mbuf', and can't be NULL.
  *   Can used by 'ff_zc_mbuf_write' and 'ff_zc_mbuf_read'.
  * @param len
  *   The total buf len of mbuf chain that you want to alloc.
@@ -264,8 +264,11 @@ struct ff_zc_mbuf {
  */
 int ff_zc_mbuf_get(struct ff_zc_mbuf *m, int len);
 
+/* used to expand a ff_zc_mbuf previously given by ff_zc_mbuf_get */
+int ff_zc_mbuf_expand(struct ff_zc_mbuf *m, int len);
+
 /*
- * Write data to the mbuf chain in 'sturct ff_zc_mbuf'.
+ * Write data to the mbuf chain in 'struct ff_zc_mbuf'.
  * APP can call this function multiple times, need pay attion to the offset of data.
  * but the total len can't be larger than m->len.
  * After this fuction return success,
@@ -279,7 +282,7 @@ int ff_zc_mbuf_get(struct ff_zc_mbuf *m, int len);
  * See 'example/main_zc.c'
  *
  * @param m
- *   The ponitor of 'sturct ff_zc_mbuf', must be call 'ff_zc_mbuf_get' first.
+ *   The ponitor of 'struct ff_zc_mbuf', must be call 'ff_zc_mbuf_get' first.
  * @param data
  *   The pointer of data that want to write to socket, need pay attion to the offset.
  * @param len
@@ -291,13 +294,45 @@ int ff_zc_mbuf_get(struct ff_zc_mbuf *m, int len);
  */
 int ff_zc_mbuf_write(struct ff_zc_mbuf *m, const char *data, int len);
 
+
+/* F-STACK ZC READ API: is not really zero-copy yet, harder to 
+ * pull that off because bsd stores data of each IP packet
+ * in a separate mbuf and chains them. Currently only useful to decrease
+ * overhead of kernel when reading data - now reading/consuming 
+ * is separated and user-controlled so framed streams can be
+ * cheaper to process. */
+
 /*
- * Read data to the mbuf chain in 'sturct ff_zc_mbuf'.
- * not implemented now.
+ * Read data to the mbuf chain in 'struct ff_zc_mbuf'. Must call
+ * ff_get_sock_rcvbuf to the ff_zc_mbuf first. 
+ * Can be called multiple times, each call will consume 'len' bytes from
+ * the ff_zc_mbuf or return with error if not enough length left. Can check m->len.
  */
-int ff_zc_mbuf_read(struct ff_zc_mbuf *m, const char *data, int len);
+int ff_zc_mbuf_read(struct ff_zc_mbuf *m, char *data, int len);
+
+/* Call to get head of BSD socket rcv buffer mbuf chain (encapsulated in struct
+ * ff_zc_mbuf), can read from it with ff_zc_mbuf_read. */
+ssize_t ff_get_sock_rcvbuf(int s, struct ff_zc_mbuf *zm);
+
+/* Call to consume `n` bytes of data from BSD rcvbuf of socket `s` */
+ssize_t ff_sock_rcvbuf_consume_nbytes(int s, int n);
 
 /* ZERO COPY API end */
+
+/* EXPOSE API begin */
+
+/* can be useful if application creates its own shared memory,
+ * to have a good per-proc index already provided.*/
+int ff_get_rx_queue(int port_id);
+
+/* if app needs master process to create the memory, it must
+ * know how many to prepare for */
+int ff_num_rx_queues(int port_id);
+
+/* can repeat prev 2 for every port */
+int ff_num_ports(void);
+
+/* EXPOSE API end*/
 
 #ifdef __cplusplus
 }

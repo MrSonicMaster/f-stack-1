@@ -144,6 +144,8 @@ static struct ff_top_args ff_top_status;
 static struct ff_traffic_args ff_traffic;
 extern void ff_hardclock(void);
 
+extern void fetch_rss_state(uint16_t port_id, int reta_size);
+
 static void
 ff_hardclock_job(__rte_unused struct rte_timer *timer,
     __rte_unused void *arg) {
@@ -627,7 +629,7 @@ init_port_start(void)
                 addr.addr_bytes, RTE_ETHER_ADDR_LEN);
 
             /* Set RSS mode */
-            uint64_t default_rss_hf = ETH_RSS_PROTO_MASK;
+            uint64_t default_rss_hf = RTE_ETH_RSS_NONFRAG_IPV4_TCP;//ETH_RSS_PROTO_MASK;
             port_conf.rxmode.mq_mode = ETH_MQ_RX_RSS;
             port_conf.rx_adv_conf.rss_conf.rss_hf = default_rss_hf;
             if (dev_info.hash_key_size == 52) {
@@ -800,6 +802,8 @@ init_port_start(void)
                  * FIXME: modify RSS set to FDIR
                  */
                 set_rss_table(port_id, dev_info.reta_size, nb_queues);
+
+                fetch_rss_state(port_id, dev_info.reta_size);
             }
     #endif
 
@@ -1923,7 +1927,7 @@ main_loop(void *arg)
 
         if (likely(lr->loop != NULL && (!idle || cur_tsc - usch_tsc >= drain_tsc))) {
             usch_tsc = cur_tsc;
-            lr->loop(lr->arg);
+            lr->loop(lr->arg, div_tsc);
         }
 
         idle_sleep_tsc = rte_rdtsc();
@@ -1988,28 +1992,28 @@ ff_dpdk_pktmbuf_free(void *m)
     rte_pktmbuf_free_seg((struct rte_mbuf *)m);
 }
 
-static uint32_t
-toeplitz_hash(unsigned keylen, const uint8_t *key,
-    unsigned datalen, const uint8_t *data)
-{
-    uint32_t hash = 0, v;
-    u_int i, b;
+// static uint32_t
+// toeplitz_hash(unsigned keylen, const uint8_t *key,
+//     unsigned datalen, const uint8_t *data)
+// {
+//     uint32_t hash = 0, v;
+//     u_int i, b;
 
-    /* XXXRW: Perhaps an assertion about key length vs. data length? */
+//     /* XXXRW: Perhaps an assertion about key length vs. data length? */
 
-    v = (key[0]<<24) + (key[1]<<16) + (key[2] <<8) + key[3];
-    for (i = 0; i < datalen; i++) {
-        for (b = 0; b < 8; b++) {
-            if (data[i] & (1<<(7-b)))
-                hash ^= v;
-            v <<= 1;
-            if ((i + 4) < keylen &&
-                (key[i+4] & (1<<(7-b))))
-                v |= 1;
-        }
-    }
-    return (hash);
-}
+//     v = (key[0]<<24) + (key[1]<<16) + (key[2] <<8) + key[3];
+//     for (i = 0; i < datalen; i++) {
+//         for (b = 0; b < 8; b++) {
+//             if (data[i] & (1<<(7-b)))
+//                 hash ^= v;
+//             v <<= 1;
+//             if ((i + 4) < keylen &&
+//                 (key[i+4] & (1<<(7-b))))
+//                 v |= 1;
+//         }
+//     }
+//     return (hash);
+// }
 
 int
 ff_in_pcbladdr(uint16_t family, void *faddr, uint16_t fport, void *laddr)
@@ -2038,43 +2042,43 @@ ff_regist_pcblddr_fun(pcblddr_func_t func)
     pcblddr_fun = func;
 }
 
-int
-ff_rss_check(void *softc, uint32_t saddr, uint32_t daddr,
-    uint16_t sport, uint16_t dport)
-{
-    struct lcore_conf *qconf = &lcore_conf;
-    struct ff_dpdk_if_context *ctx = ff_veth_softc_to_hostc(softc);
-    uint16_t nb_queues = qconf->nb_queue_list[ctx->port_id];
+// int
+// ff_rss_check(void *softc, uint32_t saddr, uint32_t daddr,
+//     uint16_t sport, uint16_t dport)
+// {
+//     struct lcore_conf *qconf = &lcore_conf;
+//     struct ff_dpdk_if_context *ctx = ff_veth_softc_to_hostc(softc);
+//     uint16_t nb_queues = qconf->nb_queue_list[ctx->port_id];
 
-    if (nb_queues <= 1) {
-        return 1;
-    }
+//     if (nb_queues <= 1) {
+//         return 1;
+//     }
 
-    uint16_t reta_size = rss_reta_size[ctx->port_id];
-    uint16_t queueid = qconf->tx_queue_id[ctx->port_id];
+//     uint16_t reta_size = rss_reta_size[ctx->port_id];
+//     uint16_t queueid = qconf->tx_queue_id[ctx->port_id];
 
-    uint8_t data[sizeof(saddr) + sizeof(daddr) + sizeof(sport) +
-        sizeof(dport)];
+//     uint8_t data[sizeof(saddr) + sizeof(daddr) + sizeof(sport) +
+//         sizeof(dport)];
 
-    unsigned datalen = 0;
+//     unsigned datalen = 0;
 
-    bcopy(&saddr, &data[datalen], sizeof(saddr));
-    datalen += sizeof(saddr);
+//     bcopy(&saddr, &data[datalen], sizeof(saddr));
+//     datalen += sizeof(saddr);
 
-    bcopy(&daddr, &data[datalen], sizeof(daddr));
-    datalen += sizeof(daddr);
+//     bcopy(&daddr, &data[datalen], sizeof(daddr));
+//     datalen += sizeof(daddr);
 
-    bcopy(&sport, &data[datalen], sizeof(sport));
-    datalen += sizeof(sport);
+//     bcopy(&sport, &data[datalen], sizeof(sport));
+//     datalen += sizeof(sport);
 
-    bcopy(&dport, &data[datalen], sizeof(dport));
-    datalen += sizeof(dport);
+//     bcopy(&dport, &data[datalen], sizeof(dport));
+//     datalen += sizeof(dport);
 
-    uint32_t hash = 0;
-    hash = toeplitz_hash(rsskey_len, rsskey, datalen, data);
+//     uint32_t hash = 0;
+//     hash = toeplitz_hash(rsskey_len, rsskey, datalen, data);
 
-    return ((hash & (reta_size - 1)) % nb_queues) == queueid;
-}
+//     return ((hash & (reta_size - 1)) % nb_queues) == queueid;
+// }
 
 void
 ff_regist_packet_dispatcher(dispatch_func_t func)
@@ -2090,3 +2094,15 @@ ff_get_tsc_ns()
     return ((double)cur_tsc/(double)hz) * NS_PER_S;
 }
 
+/* can be useful if application creates its own shared memory, 
+ * to have a good per-proc index already provided.*/
+int ff_get_rx_queue(int port_id) {
+  return lcore_conf.rx_queue_list[port_id].queue_id;
+}
+
+/* if app needs master process to create the memory, it must
+ * know how many to prepare for */
+int ff_num_rx_queues(int port_id) { return lcore_conf.nb_rx_queue; }
+
+/* can repeat prev 2 for every port */
+int ff_num_ports() { return ff_global_cfg.dpdk.nb_ports; }

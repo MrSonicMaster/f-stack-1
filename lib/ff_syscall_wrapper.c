@@ -58,6 +58,12 @@
 
 #include <machine/stdarg.h>
 
+/* for low-level api at bottom */
+#include <security/audit/audit.h>
+#include <sys/protosw.h>
+#include <sys/mutex.h>
+#include <sys/sockbuf.h>
+
 #include "ff_api.h"
 #include "ff_host_interface.h"
 
@@ -1390,4 +1396,72 @@ ff_route_ctl(enum FF_ROUTE_CTL req, enum FF_ROUTE_FLAG flag,
 kern_fail:
     ff_os_errno(rc);
     return (-1);
+}
+
+
+/* ---------------- */
+
+/* first half of stripped-down combined version of kern_recvit and soreceive */
+ssize_t ff_get_sock_rcvbuf(int s, struct ff_zc_mbuf *zm) {
+    struct file *fp;
+    struct socket *so;
+    int error;
+
+    AUDIT_ARG_FD(s);
+
+    if (zm == NULL)
+      return -1;
+
+    error = getsock_cap(curthread, s, &cap_recv_rights, &fp, NULL, NULL);
+    if (error != 0)
+      goto kern_out;
+    
+    so = fp->f_data;
+
+    zm->len = so->so_rcv.sb_acc;
+    zm->bsd_mbuf_off = zm->bsd_mbuf = so->so_rcv.sb_mb;
+
+    fdrop(fp, curthread);
+
+kern_out:
+    return error;
+}
+
+/* second half of stripped-down combined version of kern_recvit and soreceive */
+ssize_t ff_sock_rcvbuf_consume_nbytes(int s, int n) {
+  struct file *fp;
+  struct socket *so;
+  struct sockbuf *sb;
+  int error = 0;
+
+  if (n <= 0)
+    return -1;
+
+  AUDIT_ARG_FD(s);
+
+  error = getsock_cap(curthread, s, &cap_recv_rights, &fp, NULL, NULL);
+  if (error != 0)
+    goto kern_out;
+
+  so = fp->f_data;
+  sb = &so->so_rcv;
+
+  SBLASTRECORDCHK(sb);
+  SBLASTMBUFCHK(sb);
+
+  /*
+   * Remove the delivered data from the socket buffer
+   */
+  SOCKBUF_LOCK(sb);
+  sbdrop_locked(sb, n);
+  SOCKBUF_UNLOCK(sb);
+
+  /* Notify protocol that we drained some data. */
+  if (so->so_proto->pr_flags & PR_WANTRCVD)
+    (*so->so_proto->pr_usrreqs->pru_rcvd)(so, 0);
+
+  fdrop(fp, curthread);
+
+kern_out:
+  return error;
 }
