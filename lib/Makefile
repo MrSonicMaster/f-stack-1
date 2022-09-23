@@ -28,7 +28,7 @@ endif
 
 HOST_OS:=$(shell uname -s)
 
-DEBUG=-O0 -gdwarf-2 -g3 -Wno-format-truncation
+DEBUG=-O0 -gdwarf-2 -g3 -Wno-format-truncation -fdebug-prefix-map=${TOPDIR}=.
 
 # # No DPDK KNI support on FreeBSD
 # ifneq ($(TGT_OS),FreeBSD)
@@ -42,7 +42,7 @@ DEBUG=-O0 -gdwarf-2 -g3 -Wno-format-truncation
 #FF_NETGRAPH=1
 #FF_IPFW=1
 
-FF_USE_PAGE_ARRAY=1
+# FF_USE_PAGE_ARRAY=1
 FF_ZC_SEND=1
 FF_INET6=1
 
@@ -639,7 +639,9 @@ SRCS+= ${MSRCS} ${NET_SRCS} ${NETGRAPH_SRCS} ${NETINET_SRCS} ${NETINET6_SRCS} ${
 SRCS+= ${NETIPSEC_SRCS} ${NETIPFW_SRCS} ${OPENCRYPTO_SRCS} ${VM_SRCS}
 
 # If witness is enabled.
-# SRCS+= ${KERN_WITNESS_SRCS}
+# SRCS += subr_witness.c subr_stack.c
+
+# CFLAGS+= -DSTACK -DINVARIANT_SUPPORT -DINVARIANTS -DDIAGNOSTIC
 
 # Extra FreeBSD kernel module srcs.
 SRCS+= ${KMOD_SRCS}

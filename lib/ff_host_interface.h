@@ -63,7 +63,7 @@ void ff_update_current_ts(void);
 
 typedef volatile uintptr_t ff_mutex_t;
 typedef void * ff_cond_t;
-typedef void * ff_rwlock_t;
+typedef volatile uintptr_t ff_rwlock_t;
 
 void ff_arc4rand(void *ptr, unsigned int len, int reseed);
 uint32_t ff_arc4random(void);
@@ -75,8 +75,8 @@ void ff_os_errno(int error);
 
 int ff_in_pcbladdr(uint16_t family, void *faddr, uint16_t fport, void *laddr);
 
-int ff_rss_check(void *softc, uint32_t saddr, uint32_t daddr,
-    uint16_t sport, uint16_t dport);
+int __ff_rss_check(void *softc, uint32_t saddr, uint32_t daddr, uint16_t sport,
+                   uint16_t dport);
 
 #endif
 

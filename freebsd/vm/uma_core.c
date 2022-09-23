@@ -105,6 +105,9 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/md_var.h>
 
+#pragma GCC diagnostic ignored "-Wformat"
+#pragma GCC diagnostic ignored "-Wformat-extra-args"
+
 #ifdef INVARIANTS
 #define	UMA_ALWAYS_CTORDTOR	1
 #else

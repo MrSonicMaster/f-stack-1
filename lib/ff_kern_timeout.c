@@ -397,7 +397,7 @@ softclock_call_cc(struct callout *c, struct callout_cpu *cc,
     sbintime_t sbt1, sbt2;
     struct timespec ts2;
     static sbintime_t maxdt = 2 * SBT_1MS;    /* 2 msec */
-    static timeout_t *lastfunc;
+    static callout_func_t *lastfunc;
 #endif
 
     KASSERT((c->c_iflags & CALLOUT_PENDING) == CALLOUT_PENDING,

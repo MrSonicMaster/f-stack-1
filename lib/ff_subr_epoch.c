@@ -81,3 +81,9 @@ epoch_drain_callbacks(epoch_t epoch)
 {
 
 }
+
+int 
+in_epoch(epoch_t epoch) 
+{
+    return 0;
+}

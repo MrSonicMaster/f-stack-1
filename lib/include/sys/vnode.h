@@ -46,6 +46,7 @@ struct vnode {
     enum vtype v_type;
     struct mount *v_mount;  /* u ptr to vfs we are in */
     u_long v_vflag;         /* v vnode flags */
+    int v_usecount;         /* i ref count of users */
     int v_fd;               /* file descriptor */
 };
 
@@ -150,6 +151,8 @@ int vn_rdwr(enum uio_rw rw, struct vnode *vp, void *base,
 #define vfs_smr_exit()    smr_exit(VFS_SMR())
 #define vfs_smr_entered_load(ptr)    smr_entered_load((ptr), VFS_SMR())
 #define VFS_SMR_ASSERT_ENTERED()    SMR_ASSERT_ENTERED(VFS_SMR())
+
+void vn_printf(struct vnode *vp, const char *fmt, ...) __printflike(2, 3);
 
 static __inline void
 vrefact(struct vnode *vp)

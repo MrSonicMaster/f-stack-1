@@ -1512,7 +1512,7 @@ in_pcbconnect_setup(struct inpcb *inp, struct sockaddr *nam,
 			    cred);
 			if (error)
 				return (error);
-			rss = ff_rss_check(ifp->if_softc, faddr.s_addr, laddr.s_addr,
+			rss = __ff_rss_check(ifp->if_softc, faddr.s_addr, laddr.s_addr,
 			    fport, lport);
 			if (rss) {
 				break;

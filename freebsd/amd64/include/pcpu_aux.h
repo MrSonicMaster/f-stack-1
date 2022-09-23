@@ -44,6 +44,7 @@
 /* Required for counters(9) to work on x86. */
 _Static_assert(sizeof(struct pcpu) == UMA_PCPU_ALLOC_SIZE, "fix pcpu size");
 
+extern struct pcpu pcpu0;
 extern struct pcpu *__pcpu;
 extern struct pcpu temp_bsp_pcpu;
 

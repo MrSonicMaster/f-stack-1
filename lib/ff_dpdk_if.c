@@ -24,6 +24,7 @@
  *
  */
 #include <assert.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <sys/mman.h>
 #include <errno.h>
@@ -111,9 +112,6 @@ static uint8_t symmetric_rsskey[52] = {
     0x6d, 0x5a, 0x6d, 0x5a
 };
 
-static int rsskey_len = sizeof(default_rsskey_40bytes);
-static uint8_t *rsskey = default_rsskey_40bytes;
-
 struct lcore_conf lcore_conf;
 
 struct rte_mempool *pktmbuf_pool[NB_SOCKETS];
@@ -144,7 +142,9 @@ static struct ff_top_args ff_top_status;
 static struct ff_traffic_args ff_traffic;
 extern void ff_hardclock(void);
 
-extern void fetch_rss_state(uint16_t port_id, int reta_size);
+extern const uint8_t *ff_init_thash(uint8_t *initial_key, const uint32_t key_len,
+                             const uint32_t reta_len, const int port_id);
+extern void fetch_rss_state(uint16_t port_id, int rss_key_len, int reta_len);
 
 static void
 ff_hardclock_job(__rte_unused struct rte_timer *timer,
@@ -548,6 +548,8 @@ set_rss_table(uint16_t port_id, uint16_t reta_size, uint16_t nb_queues)
         return;
     }
 
+    printf("SET RSS ReTa table\n");
+
     int reta_conf_size = RTE_MAX(1, reta_size / RTE_RETA_GROUP_SIZE);
     struct rte_eth_rss_reta_entry64 reta_conf[reta_conf_size];
 
@@ -564,6 +566,8 @@ set_rss_table(uint16_t port_id, uint16_t reta_size, uint16_t nb_queues)
         rte_exit(EXIT_FAILURE, "port[%d], failed to update rss table\n",
             port_id);
     }
+
+    printf("SET RSS ReTa table SUCCESS\n");
 }
 #endif
 
@@ -628,29 +632,6 @@ init_port_start(void)
             rte_memcpy(pconf->mac,
                 addr.addr_bytes, RTE_ETHER_ADDR_LEN);
 
-            /* Set RSS mode */
-            uint64_t default_rss_hf = RTE_ETH_RSS_NONFRAG_IPV4_TCP;//ETH_RSS_PROTO_MASK;
-            port_conf.rxmode.mq_mode = ETH_MQ_RX_RSS;
-            port_conf.rx_adv_conf.rss_conf.rss_hf = default_rss_hf;
-            if (dev_info.hash_key_size == 52) {
-                rsskey = default_rsskey_52bytes;
-                rsskey_len = 52;
-            }
-            if (ff_global_cfg.dpdk.symmetric_rss) {
-                printf("Use symmetric Receive-side Scaling(RSS) key\n");
-                rsskey = symmetric_rsskey;
-            }
-            port_conf.rx_adv_conf.rss_conf.rss_key = rsskey;
-            port_conf.rx_adv_conf.rss_conf.rss_key_len = rsskey_len;
-            port_conf.rx_adv_conf.rss_conf.rss_hf &= dev_info.flow_type_rss_offloads;
-            if (port_conf.rx_adv_conf.rss_conf.rss_hf !=
-                    ETH_RSS_PROTO_MASK) {
-                printf("Port %u modified RSS hash function based on hardware support,"
-                        "requested:%#"PRIx64" configured:%#"PRIx64"\n",
-                        port_id, default_rss_hf,
-                        port_conf.rx_adv_conf.rss_conf.rss_hf);
-            }
-
             if (dev_info.tx_offload_capa & DEV_TX_OFFLOAD_MBUF_FAST_FREE) {
                 port_conf.txmode.offloads |=
                     DEV_TX_OFFLOAD_MBUF_FAST_FREE;
@@ -711,6 +692,24 @@ init_port_start(void)
                 printf("TSO is disabled\n");
             }
 
+            /* Set RSS mode */
+            // ETH_RSS_PROTO_MASK RTE_ETH_RSS_NONFRAG_IPV4_TCP
+            uint64_t default_rss_hf = RTE_ETH_RSS_NONFRAG_IPV4_TCP;
+            uint32_t rsskey_len = sizeof(default_rsskey_40bytes);
+            uint8_t *rsskey = default_rsskey_40bytes;
+
+            port_conf.rxmode.mq_mode = ETH_MQ_RX_RSS;
+            port_conf.rx_adv_conf.rss_conf.rss_hf = default_rss_hf;
+            if (dev_info.hash_key_size == 52) {
+              rsskey = default_rsskey_52bytes;
+              rsskey_len = 52;
+            }
+            if (ff_global_cfg.dpdk.symmetric_rss) {
+              printf("Use symmetric Receive-side Scaling(RSS) key\n");
+              rsskey = symmetric_rsskey;
+              rsskey_len = 52;
+            }
+
             if (dev_info.reta_size) {
                 /* reta size must be power of 2 */
                 assert((dev_info.reta_size & (dev_info.reta_size - 1)) == 0);
@@ -721,8 +720,27 @@ init_port_start(void)
             }
 
             if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
-                continue;
+              fetch_rss_state(port_id, rsskey_len, dev_info.reta_size);
+              continue;
             }
+
+            rsskey = ff_init_thash(rsskey, rsskey_len, dev_info.reta_size, port_id);
+            if (rsskey == NULL)
+              rte_exit(1, "FAILED to load thash!");
+
+            port_conf.rx_adv_conf.rss_conf.rss_key = rsskey;
+            port_conf.rx_adv_conf.rss_conf.rss_key_len = rsskey_len;
+
+            port_conf.rx_adv_conf.rss_conf.rss_hf &= dev_info.flow_type_rss_offloads;
+            if (port_conf.rx_adv_conf.rss_conf.rss_hf != default_rss_hf) {
+              printf("Port %u modified RSS hash function based on hardware "
+                     "support,"
+                     "requested:%#" PRIx64 " configured:%#" PRIx64 "\n",
+                     port_id, default_rss_hf,
+                     port_conf.rx_adv_conf.rss_conf.rss_hf);
+            }
+
+            printf("CONFIGURE ethdev\n");
 
             ret = rte_eth_dev_configure(port_id, nb_queues, nb_queues, &port_conf);
             if (ret != 0) {
@@ -802,10 +820,10 @@ init_port_start(void)
                  * FIXME: modify RSS set to FDIR
                  */
                 set_rss_table(port_id, dev_info.reta_size, nb_queues);
-
-                fetch_rss_state(port_id, dev_info.reta_size);
             }
     #endif
+
+            fetch_rss_state(port_id, rsskey_len, dev_info.reta_size);
 
             /* Enable RX in promiscuous mode for the Ethernet device. */
             if (ff_global_cfg.dpdk.promiscuous) {
@@ -2219,7 +2237,9 @@ int ff_get_rx_queue(int port_id) {
 
 /* if app needs master process to create the memory, it must
  * know how many to prepare for */
-int ff_num_rx_queues(int port_id) { return lcore_conf.nb_rx_queue; }
+int ff_num_rx_queues(int port_id) {
+  return ff_global_cfg.dpdk.port_cfgs[port_id].nb_lcores;
+}
 
 /* can repeat prev 2 for every port */
 int ff_num_ports() { return ff_global_cfg.dpdk.nb_ports; }

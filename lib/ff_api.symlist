@@ -58,9 +58,7 @@ ff_zc_mbuf_get
 ff_zc_mbuf_write
 ff_zc_mbuf_read
 ff_zc_mbuf_expand
+ff_zc_mbuf_drop_st
 ff_get_sock_rcvbuf
 ff_sock_rcvbuf_consume_nbytes
-ff_get_rss_queue
-ff_get_rx_queue
-ff_num_rx_queues
-ff_num_ports
+ff_bind_fast

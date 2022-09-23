@@ -52,6 +52,7 @@
 #include <net/if.h>
 #include <net/if_var.h>
 #include <netinet/in_var.h>
+#include <sys/_stdarg.h>
 
 int lo_set_defaultaddr(void);
 
@@ -66,6 +67,7 @@ extern void ff_init_thread0(void);
 
 struct sx proctree_lock;
 struct pcpu *pcpup;
+struct pcpu pcpu0;
 struct uma_page_head *uma_page_slab_hash;
 int uma_page_mask;
 extern cpuset_t all_cpus;
@@ -120,6 +122,25 @@ int lo_set_defaultaddr(void)
     return ret;
 }
 
+void ff_do_abort(void) __attribute__((__noreturn__));
+
+void panic(const char *, ...) __attribute__((__noreturn__));
+
+const char *panicstr = NULL;
+
+void
+panic(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+
+    ff_do_abort();
+}
+
+
 int
 ff_freebsd_init(void)
 {
@@ -148,7 +169,7 @@ ff_freebsd_init(void)
 
     physmem = ff_global_cfg.freebsd.physmem;
 
-    pcpup = malloc(sizeof(struct pcpu), M_DEVBUF, M_ZERO);
+    pcpup = &pcpu0;
     pcpu_init(pcpup, 0, sizeof(struct pcpu));
     PCPU_SET(prvspace, pcpup);
     CPU_SET(0, &all_cpus);

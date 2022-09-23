@@ -133,21 +133,8 @@ ff_free(void *p)
     free(p);
 }
 
-void panic(const char *, ...) __attribute__((__noreturn__));
-
-const char *panicstr = NULL;
-
-void
-panic(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vprintf(fmt, ap);
-    va_end(ap);
-
-    abort();
-}
+void ff_do_abort(void) __attribute__((__noreturn__));
+void ff_do_abort() { abort(); }
 
 void
 ff_clock_gettime(int id, int64_t *sec, long *nsec)

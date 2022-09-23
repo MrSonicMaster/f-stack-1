@@ -274,6 +274,19 @@ int ff_zc_mbuf_expand(struct ff_zc_mbuf *m, int len) {
   return 0;
 }
 
+/* drop n bytes from head of zc mbuf */
+int ff_zc_mbuf_drop_st(struct ff_zc_mbuf *m, int len) {
+  struct mbuf *mb;
+
+	if (m == NULL)
+  	return -1;
+		
+	m_adj(m->bsd_mbuf, len);
+	m->len -= len;
+
+  return 0;
+}
+
 int
 ff_zc_mbuf_write(struct ff_zc_mbuf *zm, const char *data, int len)
 {

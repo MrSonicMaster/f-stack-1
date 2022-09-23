@@ -267,6 +267,9 @@ int ff_zc_mbuf_get(struct ff_zc_mbuf *m, int len);
 /* used to expand a ff_zc_mbuf previously given by ff_zc_mbuf_get */
 int ff_zc_mbuf_expand(struct ff_zc_mbuf *m, int len);
 
+/* drop n bytes from head of zc mbuf */
+int ff_zc_mbuf_drop_st(struct ff_zc_mbuf *m, int len);
+
 /*
  * Write data to the mbuf chain in 'struct ff_zc_mbuf'.
  * APP can call this function multiple times, need pay attion to the offset of data.
@@ -316,6 +319,9 @@ ssize_t ff_get_sock_rcvbuf(int s, struct ff_zc_mbuf *zm);
 
 /* Call to consume `n` bytes of data from BSD rcvbuf of socket `s` */
 ssize_t ff_sock_rcvbuf_consume_nbytes(int s, int n);
+
+/* bind dgram socket to local port */
+ssize_t ff_bind_fast(int s, uint32_t addr, uint16_t port);
 
 /* ZERO COPY API end */
 

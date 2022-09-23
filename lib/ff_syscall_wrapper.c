@@ -59,9 +59,10 @@
 #include <machine/stdarg.h>
 
 /* for low-level api at bottom */
+#include <netinet/in_pcb.h>
 #include <security/audit/audit.h>
-#include <sys/protosw.h>
 #include <sys/mutex.h>
+#include <sys/protosw.h>
 #include <sys/sockbuf.h>
 
 #include "ff_api.h"
@@ -1459,6 +1460,29 @@ ssize_t ff_sock_rcvbuf_consume_nbytes(int s, int n) {
   /* Notify protocol that we drained some data. */
   if (so->so_proto->pr_flags & PR_WANTRCVD)
     (*so->so_proto->pr_usrreqs->pru_rcvd)(so, 0);
+
+  fdrop(fp, curthread);
+
+kern_out:
+  return error;
+}
+
+ssize_t ff_bind_fast(int s, uint32_t addr, uint16_t port) {
+  struct file *fp;
+  struct socket *so;
+  struct inpcb *inp;
+  int error = 0;
+
+  error = getsock_cap(curthread, s, &cap_recv_rights, &fp, NULL, NULL);
+  if (error != 0)
+    goto kern_out;
+
+  so = fp->f_data;
+
+  inp = so_sotoinpcb(so);
+
+  inp->inp_laddr.s_addr = addr;
+  inp->inp_lport = port;
 
   fdrop(fp, curthread);
 
