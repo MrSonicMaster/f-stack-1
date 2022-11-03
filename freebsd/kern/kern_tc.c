@@ -18,6 +18,7 @@
  * under sponsorship from the FreeBSD Foundation.
  */
 
+#include "sys/time.h"
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -1962,6 +1963,7 @@ inittimecounter(void *dummy)
 	tc_tick_sbt = bttosbt(tc_tick_bt);
 	p = (tc_tick * 1000000) / hz;
 	printf("Timecounters tick every %d.%03u msec\n", p / 1000, p % 1000);
+	printf("tick_sbt = %ld\n", tick_sbt);
 
 #ifdef FFCLOCK
 	ffclock_init();

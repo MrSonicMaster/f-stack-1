@@ -765,7 +765,10 @@ callout_reset_tick_on(struct callout *c, int to_ticks,
     if (to_ticks <= 0)
         to_ticks = 1;
 
-    callout_cc_add(c, cc, to_ticks, ftn, arg, cpu, flags);
+    printf("%sscheduled %p func %p arg %p in %d\n", cancelled ? "re" : "", c,
+           c->c_func, c->c_arg, to_ticks);
+
+        callout_cc_add(c, cc, to_ticks, ftn, arg, cpu, flags);
     CTR5(KTR_CALLOUT, "%sscheduled %p func %p arg %p in %d",
         cancelled ? "re" : "", c, c->c_func, c->c_arg, to_ticks);
     CC_UNLOCK(cc);
@@ -1205,11 +1208,11 @@ ff_hardclock(void)
 {
     atomic_add_int(&ticks, 1);
     callout_tick();
-    tc_ticktock((hz + 999)/1000);
+    tc_ticktock(1);
     cpu_tick_calibration();
 
 #ifdef DEVICE_POLLING
-    hardclock_device_poll();    /* this is very short and quick */
+    hardclock_device_poll(); /* this is very short and quick */
 #endif /* DEVICE_POLLING */
 }
 

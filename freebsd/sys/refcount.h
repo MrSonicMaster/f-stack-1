@@ -150,13 +150,13 @@ refcount_releasen(volatile u_int *count, u_int n)
 
 	atomic_thread_fence_rel();
 	old = atomic_fetchadd_int(count, -n);
+
 	if (__predict_false(old < n || REFCOUNT_SATURATED(old))) {
 		_refcount_update_saturated(count);
 		return (false);
 	}
 	if (old > n)
 		return (false);
-
 	/*
 	 * Last reference.  Signal the user to call the destructor.
 	 *

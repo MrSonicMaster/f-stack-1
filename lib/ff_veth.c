@@ -339,7 +339,7 @@ ff_zc_mbuf_read(struct ff_zc_mbuf *zm, char *data, int len)
         bcopy(mtod(m, char *) + zm->off, data + progress, length);
         progress += length;
 
-        if (length + zm->off == m->m_len) { 
+        if (length + zm->off == m->m_len) {
             m = m->m_next;
             zm->off = 0;
         } else 
@@ -351,6 +351,37 @@ ff_zc_mbuf_read(struct ff_zc_mbuf *zm, char *data, int len)
     zm->bsd_mbuf_off = m;
 
     return progress;
+}
+
+int
+ff_collect_tsc(struct ff_zc_mbuf *zm, uint64_t *lo, uint64_t *hi, int len) {
+    struct mbuf *m = (struct mbuf *)zm->bsd_mbuf_off;
+    if (m == NULL || zm->len < len)
+        return 0;
+
+    uint64_t tsc, llo = *lo, lhi = *hi;
+    int cumlen = -zm->off;
+
+    do {
+        if (m->m_len >= 2040) {
+            printf("ERROR MBUF TOO LARGE!\n");
+        }
+
+        cumlen += m->m_len;
+        tsc = *(uint64_t *)(mtod(m, char *) + m->m_len);
+
+        if (tsc > lhi)
+            lhi = tsc;
+        if (tsc < llo)
+            llo = tsc;
+
+        m = m->m_next;
+    } while (m && len > cumlen);
+
+    *lo = llo;
+    *hi = lhi;
+
+    return 0;
 }
 
 void *
@@ -515,13 +546,13 @@ ff_veth_setvaddr(struct ff_veth_softc *sc, struct ff_port_cfg *cfg)
         sa.sin_addr.s_addr = sc->vip[i];
         bcopy(&sa, &req.ifra_addr, sizeof(sa));
 
-        // Only support '255.255.255.255' netmask now
-        sa.sin_addr.s_addr = 0xFFFFFFFF;
+        inet_aton(cfg->netmask, &sa.sin_addr);
         bcopy(&sa, &req.ifra_mask, sizeof(sa));
 
-        // Only support 'x.x.x.255' broadaddr now
-        sa.sin_addr.s_addr = sc->vip[i] | 0xFF000000;
+        sa.sin_addr.s_addr = sc->vip[i] | (~sa.sin_addr.s_addr);
         bcopy(&sa, &req.ifra_broadaddr, sizeof(sa));
+
+        printf("addr %x mask %x brd %x\n", req.ifra_addr.sin_addr.s_addr, req.ifra_mask.sin_addr.s_addr, req.ifra_broadaddr.sin_addr.s_addr);
 
         ret = ifioctl(so, SIOCAIFADDR, (caddr_t)&req, curthread);
         if (ret < 0) {

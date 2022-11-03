@@ -59,6 +59,8 @@ ff_zc_mbuf_write
 ff_zc_mbuf_read
 ff_zc_mbuf_expand
 ff_zc_mbuf_drop_st
+ff_collect_tsc
 ff_get_sock_rcvbuf
 ff_sock_rcvbuf_consume_nbytes
 ff_bind_fast
+ff_os_errno

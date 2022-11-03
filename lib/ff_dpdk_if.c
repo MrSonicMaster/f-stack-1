@@ -24,6 +24,7 @@
  *
  */
 #include <assert.h>
+#include <rte_mbuf_core.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/mman.h>
@@ -848,12 +849,11 @@ static int
 init_clock(void)
 {
     rte_timer_subsystem_init();
-    uint64_t hz = rte_get_timer_hz();
-    uint64_t intrs = US_PER_S / ff_global_cfg.freebsd.hz;
-    uint64_t tsc = (hz + US_PER_S - 1) / US_PER_S * intrs;
+
+    uint64_t ticks = rte_get_timer_hz() / ff_global_cfg.freebsd.hz;
 
     rte_timer_init(&freebsd_clock);
-    rte_timer_reset(&freebsd_clock, tsc, PERIODICAL,
+    rte_timer_reset(&freebsd_clock, ticks, PERIODICAL,
         rte_lcore_id(), &ff_hardclock_job, NULL);
 
     ff_update_current_ts();
@@ -1280,6 +1280,14 @@ ff_veth_input(const struct ff_dpdk_if_context *ctx, struct rte_mbuf *pkt)
         ff_mbuf_set_vlan_info(hdr, pkt->vlan_tci);
     }
 
+    uint64_t *tsc;
+
+    if ((tsc = (uint64_t *)rte_pktmbuf_append(pkt, sizeof *tsc))) {
+      *tsc = rte_rdtsc();
+    } else {
+      printf("FAIL put tsc!\n");
+    }
+
     struct rte_mbuf *pn = pkt->next;
     void *prev = hdr;
     while(pn != NULL) {
@@ -1292,6 +1300,13 @@ ff_veth_input(const struct ff_dpdk_if_context *ctx, struct rte_mbuf *pkt)
             rte_pktmbuf_free(pkt);
             return;
         }
+
+        if ((tsc = (uint64_t *)rte_pktmbuf_append(pn, sizeof *tsc))) {
+          *tsc = rte_rdtsc();
+        } else {
+          printf("FAIL put tsc!\n");
+        }
+
         pn = pn->next;
         prev = mb;
     }
@@ -1966,52 +1981,37 @@ main_loop(void *arg)
     struct loop_routine *lr = (struct loop_routine *)arg;
 
     struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
-    uint64_t prev_tsc, diff_tsc, cur_tsc, usch_tsc, div_tsc, usr_tsc, sys_tsc, end_tsc, idle_sleep_tsc;
-    int i, j, nb_rx, idle;
+    uint64_t cur_tsc, div_tsc, usr_tsc, sys_tsc, end_tsc;
+    int i, j, nb_rx;
     uint16_t port_id, queue_id;
     struct lcore_conf *qconf;
-    uint64_t drain_tsc = 0;
     struct ff_dpdk_if_context *ctx;
-
-    if (pkt_tx_delay) {
-        drain_tsc = (rte_get_tsc_hz() + US_PER_S - 1) / US_PER_S * pkt_tx_delay;
-    }
-
-    prev_tsc = 0;
-    usch_tsc = 0;
 
     qconf = &lcore_conf;
 
     while (1) {
         cur_tsc = rte_rdtsc();
-        if (unlikely(freebsd_clock.expire < cur_tsc)) {
-            rte_timer_manage();
-        }
 
-        idle = 1;
+        if (unlikely(freebsd_clock.expire < cur_tsc)) 
+            rte_timer_manage();
+
+        usr_cb_tsc = 0;
         sys_tsc = 0;
         usr_tsc = 0;
-        usr_cb_tsc = 0;
+        end_tsc = 0;
 
         /*
          * TX burst queue drain
          */
-        diff_tsc = cur_tsc - prev_tsc;
-        if (unlikely(diff_tsc >= drain_tsc)) {
-            for (i = 0; i < qconf->nb_tx_port; i++) {
-                port_id = qconf->tx_port_id[i];
-                if (qconf->tx_mbufs[port_id].len == 0)
-                    continue;
+        for (i = 0; i < qconf->nb_tx_port; i++) {
+            port_id = qconf->tx_port_id[i];
+            if (qconf->tx_mbufs[port_id].len == 0)
+                continue;
 
-                idle = 0;
-
-                send_burst(qconf,
-                    qconf->tx_mbufs[port_id].len,
-                    port_id);
-                qconf->tx_mbufs[port_id].len = 0;
-            }
-
-            prev_tsc = cur_tsc;
+            send_burst(qconf,
+                qconf->tx_mbufs[port_id].len,
+                port_id);
+            qconf->tx_mbufs[port_id].len = 0;
         }
 
         /*
@@ -2028,27 +2028,26 @@ main_loop(void *arg)
             }
 #endif
 
-            idle &= !process_dispatch_ring(port_id, queue_id, pkts_burst, ctx);
+            process_dispatch_ring(port_id, queue_id, pkts_burst, ctx);
 
-            nb_rx = rte_eth_rx_burst(port_id, queue_id, pkts_burst,
-                MAX_PKT_BURST);
+            nb_rx = rte_eth_rx_burst(port_id, queue_id, pkts_burst, MAX_PKT_BURST);
             if (nb_rx == 0)
                 continue;
 
-            idle = 0;
-
             /* Prefetch first packets */
-            for (j = 0; j < PREFETCH_OFFSET && j < nb_rx; j++) {
-                rte_prefetch0(rte_pktmbuf_mtod(
-                        pkts_burst[j], void *));
-            }
+            // for (j = 0; j < PREFETCH_OFFSET && j < nb_rx; j++) {
+            //     rte_prefetch0(rte_pktmbuf_mtod(
+            //             pkts_burst[j], void *));
+            // }
 
-            /* Prefetch and handle already prefetched packets */
-            for (j = 0; j < (nb_rx - PREFETCH_OFFSET); j++) {
-                rte_prefetch0(rte_pktmbuf_mtod(pkts_burst[
-                        j + PREFETCH_OFFSET], void *));
-                process_packets(port_id, queue_id, &pkts_burst[j], 1, ctx, 0);
-            }
+            // /* Prefetch and handle already prefetched packets */
+            // for (j = 0; j < (nb_rx - PREFETCH_OFFSET); j++) {
+            //     rte_prefetch0(rte_pktmbuf_mtod(pkts_burst[
+            //             j + PREFETCH_OFFSET], void *));
+            //     process_packets(port_id, queue_id, &pkts_burst[j], 1, ctx, 0);
+            // }
+
+            j = 0;
 
             /* Handle remaining prefetched packets */
             for (; j < nb_rx; j++) {
@@ -2058,30 +2057,17 @@ main_loop(void *arg)
 
         process_msg_ring(qconf->proc_id, pkts_burst);
 
-        div_tsc = rte_rdtsc();
+        div_tsc = end_tsc = rte_rdtsc();
 
-        if (likely(lr->loop != NULL && (!idle || cur_tsc - usch_tsc >= drain_tsc))) {
-            usch_tsc = cur_tsc;
+        if (likely(lr->loop != NULL)) {
             lr->loop(lr->arg, div_tsc);
-        }
-
-        idle_sleep_tsc = rte_rdtsc();
-        if (likely(idle && idle_sleep)) {
-            usleep(idle_sleep);
             end_tsc = rte_rdtsc();
-        } else {
-            end_tsc = idle_sleep_tsc;
         }
+        
+        usr_cb_tsc += end_tsc - div_tsc;
 
-        usr_tsc = usr_cb_tsc;
-        if (usch_tsc == cur_tsc) {
-            usr_tsc += idle_sleep_tsc - div_tsc;
-        }
-
-        if (!idle) {
-            sys_tsc = div_tsc - cur_tsc - usr_cb_tsc;
-            ff_top_status.sys_tsc += sys_tsc;
-        }
+        sys_tsc = div_tsc - cur_tsc - usr_cb_tsc;
+        ff_top_status.sys_tsc += sys_tsc;
 
         ff_top_status.usr_tsc += usr_tsc;
         ff_top_status.work_tsc += end_tsc - cur_tsc;

@@ -28,7 +28,7 @@ endif
 
 HOST_OS:=$(shell uname -s)
 
-DEBUG=-O0 -gdwarf-2 -g3 -Wno-format-truncation -fdebug-prefix-map=${TOPDIR}=.
+DEBUG=-O3 -flto -gdwarf-2 -g3 -Wno-format-truncation
 
 # # No DPDK KNI support on FreeBSD
 # ifneq ($(TGT_OS),FreeBSD)

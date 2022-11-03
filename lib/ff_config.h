@@ -41,8 +41,8 @@ extern "C" {
 extern int dpdk_argc;
 extern char *dpdk_argv[DPDK_CONFIG_NUM + 1];
 
-#define MAX_PKT_BURST 32
-#define BURST_TX_DRAIN_US 100 /* TX drain every ~100us */
+#define MAX_PKT_BURST 1
+#define BURST_TX_DRAIN_US 0 /* TX drain every ~100us */
 
 #define VIP_MAX_NUM 64
 

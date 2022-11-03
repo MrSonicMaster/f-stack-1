@@ -117,8 +117,10 @@ int ff_gettimeofday(struct timeval *tv, struct timezone *tz);
 int ff_dup(int oldfd);
 int ff_dup2(int oldfd, int newfd);
 
+
 /* POSIX-LIKE api end */
 
+extern void ff_os_errno(int error);
 
 /* Tests if fd is used by F-Stack */
 extern int ff_fdisused(int fd);
@@ -269,6 +271,10 @@ int ff_zc_mbuf_expand(struct ff_zc_mbuf *m, int len);
 
 /* drop n bytes from head of zc mbuf */
 int ff_zc_mbuf_drop_st(struct ff_zc_mbuf *m, int len);
+
+/* aggregate the tsc counters stored at tail of each mbuf in chain 
+ * into lowest and highest counters observed for next `len` bytes. */
+int ff_collect_tsc(struct ff_zc_mbuf *zm, uint64_t *lo_out, uint64_t *hi_out, int len);
 
 /*
  * Write data to the mbuf chain in 'struct ff_zc_mbuf'.

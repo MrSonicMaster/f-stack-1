@@ -155,11 +155,14 @@ kern_socket(struct thread *td, int domain, int type, int protocol)
 		return (error);
 #endif
 	error = falloc(td, &fp, &fd, oflag);
-	if (error != 0)
+	if (error != 0) {
+		printf("FALLOC FAIL!\n");
 		return (error);
+	}
 	/* An extra reference on `fp' has been held for us by falloc(). */
 	error = socreate(domain, &so, type, protocol, td->td_ucred, td);
 	if (error != 0) {
+		printf("SOCREATE NONZERO! %d\n", error);
 		fdclose(td, fp, fd);
 	} else {
 		finit(fp, FREAD | FWRITE | fflag, DTYPE_SOCKET, so, &socketops);

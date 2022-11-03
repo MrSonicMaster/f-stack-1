@@ -1473,7 +1473,7 @@ ssize_t ff_bind_fast(int s, uint32_t addr, uint16_t port) {
   struct inpcb *inp;
   int error = 0;
 
-  error = getsock_cap(curthread, s, &cap_recv_rights, &fp, NULL, NULL);
+  error = getsock_cap(curthread, s, &cap_bind_rights, &fp, NULL, NULL);
   if (error != 0)
     goto kern_out;
 

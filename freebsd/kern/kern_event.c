@@ -693,11 +693,15 @@ filt_timerexpire(void *knx)
 	if ((kn->kn_flags & EV_ONESHOT) != 0)
 		return;
 	kc = kn->kn_ptr.p_v;
-	if (kc->to == 0)
-		return;
+	// if (kc->to == 0)
+	// 	return;
+
 	kc->next += kc->to;
+
+	printf("TIMER_EXPIRE %ld %ld\n", kc->next, kc->to);
+	
 	callout_reset_sbt_on(&kc->c, kc->next, 0, filt_timerexpire, kn,
-	    PCPU_GET(cpuid), C_ABSOLUTE);
+	PCPU_GET(cpuid), C_ABSOLUTE);
 }
 
 /*
@@ -769,11 +773,11 @@ filt_timerstart(struct knote *kn, sbintime_t to)
 		kc->next = to;
 		kc->to = 0;
 	} else {
-		kc->next = to + sbinuptime();
-		kc->to = to;
+		kc->next = to; // + sbinuptime();
+		kc->to = 0;//to;
 	}
 	callout_reset_sbt_on(&kc->c, kc->next, 0, filt_timerexpire, kn,
-	    PCPU_GET(cpuid), C_ABSOLUTE);
+							PCPU_GET(cpuid), C_ABSOLUTE);
 }
 
 static void
